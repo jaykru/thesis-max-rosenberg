@@ -1,127 +1,99 @@
 import random
+import queue
 from ozone.animals import AnimalNet
 from ozone.wordnet import GetRandomSynset
 from ozone.wordnet import get_all_lemmas_from_sense, hypernym_chain
 from ozone.puzzle import PuzzleGenerator
 from nltk.corpus import wordnet as wn
 
+class TaxonomyNode:
+    def __init__(self, name):
+        self.name = name
+
+class CategoryNode(TaxonomyNode):
+    def __init__(self, name):
+        super(CategoryNode, self).__init__(name)
+
+class InstanceNode(TaxonomyNode):
+    def __init__(self, name):
+        super(InstanceNode, self).__init__(name)
+
+class TaxonomyGraph:
+    def __init__(self, nodes, edges):
+        self.nodes = nodes
+        self.edges = edges
+        vertex_to_ix = dict([(v.name, k) for (k,v) in enumerate(self.nodes)])
+        self.vocab = vertex_to_ix
+        self.name_to_vertex = dict([(v.name, v) for v in (self.nodes)])
+
 class Taxonomy:
-    
-    def get_vocab(self):
-        raise NotImplementedError("Cannot call this on an abstract class.")
+    def __init__(self, nodes, edges, root):
+        self.nodes = nodes
+        self.edges = edges
+        self.root = root
+        self.graph = TaxonomyGraph(nodes, edges)
 
     def get_root_node(self):
-        raise NotImplementedError("Cannot call this on an abstract class.")
+        return self.root.name
+    
+    def get_vocab(self):
+        return self.graph.vocab
+
+    def lookup_vertex_by_name(self, name):
+        return self.graph.name_to_vertex[name]
 
     def get_descendents(self, node):
-        raise NotImplementedError("Cannot call this on an abstract class.")
+        node_obj = self.lookup_vertex_by_name(node)
+        res = []
+        to_check = queue.Queue()
+        for e in self.edges:
+            if e[0].name == node_obj.name:
+                res.append(e[1].name)
+                to_check.put(e[1])
+
+        while not to_check.empty():
+            v_to_check = to_check.get()
+            for e in self.edges:
+                if e[0].name == v_to_check.name:
+                    res.append(e[1].name)
+                    to_check.put(e[1])
+
+        return res
 
     def get_children(self, node):
-        raise NotImplementedError("Cannot call this on an abstract class.")
+        res = []
+        for e in self.edges:
+            if e[0].name == node:
+                res.append(e[1].name)
+        return res
 
-    def random_node(self, specificity_lb, specificity_ub):
-        raise NotImplementedError("Cannot call this on an abstract class.")
+    def get_ancestors(self, node):
+        node_obj = self.lookup_vertex_by_name(node)
+        if node_obj.name == "animal":
+            return []
+        res = []
+        curr = node_obj
+        while True:
+            for e in self.edges:
+                if e[1].name == curr.name:
+                    res.append(e[0].name)
+                    curr = e[0]
+                    if e[0].name == self.get_root_node():
+                        return res
 
-    def random_descendents(self, node, k):
-        raise NotImplementedError("Cannot call this on an abstract class.")
-        
-    def random_non_descendent(self, node):
-        raise NotImplementedError("Cannot call this on an abstract class.")
-
-    def hypernym_chain(self, node):
-        result = [node]
-        while len(self.ancestors(node)) > 0:
-            node = self.ancestors(node)[0]
-            result.append(node)
-        return result
-
-    def flatness(self, node):
-        """Put comment describing the metric. """
-        num_total_hyps = len(self.get_descendents(node))
-        if num_total_hyps == 0:
-            return 0
-        return len(self.get_children(node)) / num_total_hyps
-
-    def repetitions(self, node):
-        """Put comment describing the I/O. """
-        if node == self.get_root_node():
-            return self.get_descendents(self.get_root_node()).count(node) + 1
-        else:
-            return self.get_descendents(self.get_root_node()).count(node)
-
-    def wu_palmer_similarity(self, node1, node2):
-        """
-        Similarity metric from Wu and Palmer (1994).
-
-        TODO: put in description of metric.
-
-        """
-        #get dicts of hypernym:distance from node to hypernym (AKA index of list)
-        node1_hypernym_distances = dict()
-        node1_hc = self.hypernym_chain(node1)
-        for h in node1_hc:
-            node1_hypernym_distances[h] = node1_hc.index(h)
-
-        node2_hypernym_distances = dict()
-        node2_hc = self.hypernym_chain(node2)
-        for h in node2_hc:
-            node2_hypernym_distances[h] = node2_hc.index(h)
-
-        #find common hypernyms
-        common = set(node1_hc) & set(node2_hc)
-
-        #get sums of distances of common hypernyms, return word with minimum sum
-        candidates = dict()
-        for c in common:
-            candidates[c] = node1_hypernym_distances[c] + node2_hypernym_distances[c]
-            
-        lowest_common_ancestor = min(candidates, key=candidates.get)
-
-        node1_lca_distance = node1_hypernym_distances[lowest_common_ancestor]
-        node2_lca_distance = node2_hypernym_distances[lowest_common_ancestor]
-        node3_distance = len(self.hypernym_chain(lowest_common_ancestor)) - 1
-        numerator = 2 * node3_distance
-        denominator = node1_lca_distance + node2_lca_distance + (2 * node3_distance)
-        return numerator / denominator
-
-
-class AnimalTaxonomy(Taxonomy):
-    '''Basic Taxonomy of Animals'''
-    
-    def __init__(self):
-        self.an = AnimalNet()
-        self.root_synset = self.an.get_animal("animal")
-        self.vocab = self.an.graph.vocab
-
-    def get_root_node(self):
-        return self.root_synset.get_name()
-
-    def get_vocab(self):
-        return self.vocab
 
     def get_specificity(self, node):
-        return len(self.get_descendents(node)) + 1
+        return len(self.get_descendents(node))
 
-    def get_children(self, node):
-        node = self.an.get_animal(node)
-        return [child.name for child in self.an.graph.children(node)]
-
-    def get_descendents(self, node):
-        node = self.an.get_animal(node)
-        return [d.name for d in self.an.graph.descendants(node)]
-
-    def random_node(self,specificity_lb, specificity_ub):
-        shuffled_animals = [a.name for a  in self.an.graph.vertices]
-        random.shuffle(shuffled_animals)
-        for animal in shuffled_animals:
-            spec = self.get_specificity(animal)
-            if spec < specificity_ub and spec > specificity_lb:
-                return animal
+    def random_node(self, specificity_lb, specificity_ub):
+        shuffled = [x for x in self.get_descendents(self.get_root_node())]
+        shuffled.append(self.get_root_node())
+        random.shuffle(shuffled)
+        for element in shuffled:
+            spec = self.get_specificity(element)
+            if spec <= specificity_ub and spec >= specificity_lb:
+                return element
         raise Exception("Couldn't find a node with specificity within the bounds")
-
-    def random_descendents(self, node, k):
-        hyps = [hypo for hypo in self.get_descendents(node)]
-        return random.sample(hyps, k)
 
     def random_non_descendent(self, node):
         counter = 0
@@ -133,93 +105,93 @@ class AnimalTaxonomy(Taxonomy):
             else:
                 return check_node
 
-    def repetitions(self, node):
-        node = self.an.get_animal(node)
-        if node.name == self.get_root_node():
-            return self.get_descendents(self.get_root_node()).count(node.get_name()) + 1
-
-        return self.get_descendents(self.get_root_node()).count(node.get_name())
-
-    def ancestors(self, node):
-        node_obj = self.an.get_animal(node)
-        result = []
-        for y in self.an.graph.ancestors(node_obj):
-            result.append(y.get_name())
-        return result
-
-
-
-    
-
-
-    
-
-class WordnetTaxonomy(Taxonomy):
-    
-    def __init__(self, root_synset_name):
-        super().__init__()
-        self.root_synset = wn.synset(root_synset_name)
-        self.synset_gen = GetRandomSynset(root_synset_name)
-        self.vocab = self._build_vocab()
-
-    def get_root_node(self):
-        return self.root_synset.name()
-        
-    def get_vocab(self):
-        return self.vocab
-
-    def get_descendents(self, node):
-        result = set()
-        for y in node.hyponyms():
-            result.add(y)
-            for z in self.get_descendents(y):
-                result.add(z)
-        return result
-
-    def get_children(self, node):
-        return node.hyponyms()
-
-    def _build_vocab(self):
-        words = sorted(list(get_all_lemmas_from_sense(self.root_synset)))
-        word_to_ix = dict([(v, k) for (k,v) in enumerate(words)])
-        # print("vocab size: {}".format(len(word_to_ix)))
-        return word_to_ix
-
-    def random_node(self, specificity_lb, specificity_ub):
-        root = self.synset_gen.random_synset_with_specificity(specificity_lb, 
-                                                              specificity_ub)
-        if root is None:
-            return None
-        while root == self.root_synset:
-            root = self.synset_gen.random_synset_with_specificity(specificity_lb,
-                                                                  specificity_ub)
-        return root.name()
-    
     def random_descendents(self, node, k):
-        node = wn.synset(node)
-        hyps = get_all_lemmas_from_sense(node) # children?
+        # node = wn.synset(node)
+        hyps = self.get_descendents(node) # children?
         if len(hyps) < k:
             return None
         return random.sample(hyps, k)
-    
-    def random_non_descendent(self, node):
-        node = wn.synset(node)
-        hyps = get_all_lemmas_from_sense(node) # children?
-        counter = 0
-        random_hyp_lemmas = []
-        grs = GetRandomSynset(root_synset=self.root_synset.name())
-        while len(random_hyp_lemmas) == 0:
-            if counter > 10000:
-                raise Exception('Too difficult to get a non-hyponym for {}; giving up'.format(node.name()))
-            random_hyp = grs.random_non_hyponym(node.name())
-            random_hyp_lemmas = set(get_all_lemmas_from_sense(random_hyp))
-            random_hyp_lemmas -= hyps
-            counter += 1
-        random_word = random.choice(list(random_hyp_lemmas))
-        return random_word
 
+    def flatness(self, node):
+        """
+        The ratio of children to total descendents of a node.
+        A 'flatter' node will have a higher flatness.
+        """
+        num_total_hyps = len(self.get_descendents(node))
+        if num_total_hyps == 0:
+            return 0
+        return len(self.get_children(node)) / num_total_hyps
 
-    def least_similar(self, nodes):
+    def repetitions(self, node):
+        """
+        Repititions  is the number of times a given node appears in the taxonomy.
+        """
+        if node == self.get_root_node():
+            return self.get_descendents(self.get_root_node()).count(node) + 1
+        else:
+            return self.get_descendents(self.get_root_node()).count(node)
+
+    def wu_palmer_similarity(self, node1, node2):
+        """
+        Similarity metric from Wu and Palmer (1994).
+
+        Given two nodes node 1 and node 2,
+        the Wu Palmer similarity of the two nodes is the depth of the lowest common ancestor
+        of the two nodes divided by the sum of the depths of the two nodes. This ratio
+        is then multiplied by two.
+
+        """
+        # Get dicts of hypernym:distance from node to hypernym (AKA index of list)
+        node1_ancestor_distances = dict()
+        node1_ancestors = self.get_ancestors(node1)
+        for h in node1_ancestors:
+            node1_ancestor_distances[h] = node1_ancestors.index(h) 
+
+        node2_ancestor_distances = dict()
+        node2_ancestors = self.get_ancestors(node2)
+        for h in node2_ancestors:
+            node2_ancestor_distances[h] = node2_ancestors.index(h) 
+
+        # Find the common hypernyms between the two nodes
+        common = set(node1_ancestors) & set(node2_ancestors)
+
+        #get sums of distances of common hypernyms, then get the word with minimum sum
+        candidates = dict()
+        for c in common:
+            candidates[c] = node1_ancestor_distances[c] + node2_ancestor_distances[c]
+            
+        lowest_common_ancestor = min(candidates, key=candidates.get)
+
+        node1_lca_distance = node1_ancestor_distances[lowest_common_ancestor]
+        node2_lca_distance = node2_ancestor_distances[lowest_common_ancestor]
+        node3_distance = len(self.get_ancestors(lowest_common_ancestor)) - 1
+        numerator = 2 * node3_distance
+        denominator = node1_lca_distance + node2_lca_distance + (2 * node3_distance)
+        print(node1_lca_distance, node2_lca_distance, node3_distance)
+
+        if denominator == 0:
+            return 0
+
+        return numerator / denominator
+
+    def rosenberg_descendent_similarity(self, node):
+        total = 0
+        num_tests = 10
+        descendents = self.get_descendents(node)
+        for d in descendents:
+            d_sim_total = 0
+            for _ in range(num_tests):
+                x = self.random_descendents(node, 1)[0]
+                d_sim_total += self.wu_palmer_similarity(d,x)
+            d_sim_avg = d_sim_total / num_tests 
+            total += d_sim_avg
+        if len(descendents) == 0:
+            return 0
+        avg = total / len(descendents)
+        return avg
+
+    def wu_palmer_similarity_based_5thing_ooo_solver(self, nodes):
+        assert len(nodes) == 5
         nodes = [node.replace(" ", "_") for node in nodes]
         node1 = wn.synset(nodes[0] + ".n.01")
         node2 = wn.synset(nodes[1] + ".n.01")
@@ -264,6 +236,54 @@ class WordnetTaxonomy(Taxonomy):
         res = min(similarities, key=similarities.get)
         return res.name()[:-5].replace("_"," ")
 
+
+class AnimalTaxonomy(Taxonomy):
+    '''Basic Taxonomy of Animals'''
+
+    # def repetitions(self, node):
+    #     node = self.an.get_animal(node)
+    #     if node.name == self.get_root_node():
+    #         return self.get_descendents(self.get_root_node()).count(node.name()) + 1
+
+    #     return self.get_descendents(self.get_root_node()).count(node.name())
+
+class WordnetTaxonomy(Taxonomy):
+    
+    def __init__(self, root_synset_name):
+        # super().__init__()
+        self.root_node = wn.synset(root_synset_name)
+        self.synset_gen = GetRandomSynset(root_synset_name)
+        self.vocab = self._build_vocab()
+
+    def _build_vocab(self):
+        words = sorted(list(get_all_lemmas_from_sense(self.root_node)))
+        word_to_ix = dict([(v, k) for (k,v) in enumerate(words)])
+        # print("vocab size: {}".format(len(word_to_ix)))
+        return word_to_ix
+
+    def get_root_node(self):
+        return self.root_node.name()
+        
+    def get_vocab(self):
+        return self.vocab
+
+    def get_descendents(self, node):
+        node = wn.synset(node)
+        result = set()
+        for y in node.hyponyms():
+            result.add(y.name())
+            for z in self.get_descendents(y.name()):
+                result.add(z)
+        return result
+
+    def get_children(self, node):
+        node_obj = wn.synset(node)
+        return [hypo.name() for hypo in node_obj.hyponyms()]
+
+    def get_ancestors(self, node):
+        return [hyper.name() for hyper in hypernym_chain(node)]
+    
+
 class TaxonomyPuzzleGenerator(PuzzleGenerator):
     
     def __init__(self, taxonomy, num_choices):
@@ -301,13 +321,29 @@ class TaxonomyPuzzleGenerator(PuzzleGenerator):
         return (xyz, onehot.index(1))
 
 if __name__ == "__main__":
-    wnt = WordnetTaxonomy(root_synset_name="apple.n.01")
-    print(wnt.wu_palmer_similarity(wn.synset("red_delicious.n.01"), wn.synset("granny_smith.n.01")))
-    print(wnt.flatness(wn.synset("cooking_apple.n.01")))
-#     tpg = TaxonomyPuzzleGenerator(wnt, 5)
+    animal = CategoryNode("animal")
+    bird = CategoryNode("bird")
+    mammal = CategoryNode("mammal")
+    reptile = CategoryNode("reptile")
 
-#     for _ in range(5):
-#         test_puzzle = tpg.generate()
-#         print(test_puzzle)
-#         print("guess: ", wnt.least_similar(test_puzzle[0]))
-#         print("correct: ",test_puzzle[0][test_puzzle[1]])
+    finch = InstanceNode("finch")
+    swallow = InstanceNode("swallow")
+    dog = CategoryNode("dog")
+    cat = InstanceNode("cat")
+    monkey = InstanceNode("monkey")
+    giraffe = InstanceNode("giraffe")
+    iguana = InstanceNode("iguana")
+
+    bulldog = InstanceNode("bulldog")
+    poodle = InstanceNode("poodle")
+
+    vertices = [animal, bird, mammal, reptile, finch, swallow, dog,
+                    cat, monkey, giraffe, iguana, bulldog, poodle]
+
+    edges = [(animal, bird), (animal, mammal), (animal, reptile),
+            (mammal, dog), (mammal, cat), (mammal, monkey),
+            (mammal, giraffe), (bird, finch), (bird, swallow),
+            (reptile, iguana), (dog, bulldog), (dog, poodle)]
+
+    ant = Taxonomy(vertices, edges, animal)
+    
