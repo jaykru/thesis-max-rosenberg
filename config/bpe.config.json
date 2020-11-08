@@ -1,13 +1,13 @@
 [{
     "puzzle": {
         "genre": "wordnet",
-        "root": "living_thing.n.01",
+        "root": "dog.n.01",
         "numchoices": 5
     },
     "tokenizer": {
         "name": "bpe",
-        "codes": "data/codes_10k",
-        "vocab": "data/vocab_10k.txt",
+        "codes": "data/wordnet.10k.codes",
+        "vocab": "data/wordnet.10k.vocab",
         "num_tokens": 5
     },
     "batchsize": 128,
