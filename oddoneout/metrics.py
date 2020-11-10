@@ -25,7 +25,9 @@ class Taxonomy:
     def get_descendant_instances(self, node):
         raise NotImplementedError('Cannot call this method on abstract class.')
 """
-
+from taxonomy import GraphTaxonomy
+from taxonomy import lowest_common_ancestor as lowest_ca
+from ozone.taxonomy import WordnetTaxonomy
 
 def flatness(taxonomy, node):
     """
@@ -36,25 +38,39 @@ def flatness(taxonomy, node):
     graph rooted at that node
 
     """
-    num_total_hyps = len(taxonomy.get_descendants(node)) - 1
-    if num_total_hyps <= 0:
-        return 0
-    return len(taxonomy.get_children(node)) / num_total_hyps
+    non_root_nodes = len(taxonomy.get_descendants(node)) - 1
+
+    non_leaf_nodes = sum([1 for d in taxonomy.get_descendants(node) if taxonomy.is_instance(d) is not True])
+
+    average_branching_factor = non_root_nodes / non_leaf_nodes
+
+    return average_branching_factor
 
 
-def repetitions(self, node):
+def repetitions(taxonomy, node):
     """
     Revise this so that:
+
+    repetitions 1
     - it counts the number of instances that can be reached via
     more than 1 child. (for fruit example, "entity" == 2) <-- orange and peach
+
+    repetitions 2
     - or: the average number of children through which we can access an instance
     (for fruit example "entity" = (2+2+1+1+1+1) / 6
 
     """
-    if node == self.get_root_node():
-        return self.get_descendents(self.get_root_node()).count(node) + 1
-    else:
-        return self.get_descendents(self.get_root_node()).count(node)
+
+    # repetitions 1
+    total = 0
+    instances = taxonomy.get_descendant_instances(node)
+    for instance in instances:
+        total += len(taxonomy.get_parents(instance))
+    return total / len(instances)
+
+
+    # repetitions 2
+    # return sum([1 for instance in taxonomy.get_descendant_instances(node) if len(taxonomy.get_parents(instance)) > 1])
 
 
 def wu_palmer_similarity(taxonomy, node1, node2):
@@ -86,32 +102,83 @@ def wu_palmer_similarity(taxonomy, node1, node2):
     for c in common:
         candidates[c] = node1_ancestor_distances[c] + node2_ancestor_distances[c]
 
-    lowest_common_ancestor = min(candidates, key=candidates.get)
+    # lowest_common_ancestor = min(candidates, key=candidates.get)
+    lowest_common_ancestor = lowest_ca(taxonomy, [node1, node2], 'entity')[1]
+    # print("node 1 ancestors: ", node1_ancestors)
+    # print("node 2 ancestors: ", node2_ancestors)
 
     node1_lca_distance = node1_ancestor_distances[lowest_common_ancestor]
     node2_lca_distance = node2_ancestor_distances[lowest_common_ancestor]
     node3_distance = len(taxonomy.get_ancestor_categories(lowest_common_ancestor)) - 1
     numerator = 2 * node3_distance
     denominator = node1_lca_distance + node2_lca_distance + (2 * node3_distance)
-    print(node1_lca_distance, node2_lca_distance, node3_distance)
+    # print(node1_lca_distance, node2_lca_distance, node3_distance)
 
     if denominator == 0:
         return 0
     return numerator / denominator
 
+def wu_palmer_similarity_2(taxonomy, node1, node2):
+    """
+    Similarity metric from Wu and Palmer (1994).
 
-def rosenberg_descendent_similarity(self, node):
+    Given two nodes node 1 and node 2,
+    the Wu Palmer similarity of the two nodes is the depth of the lowest
+    common ancestor of the two nodes divided by the sum of the depths of
+    the two nodes. This ratio is then multiplied by two.
+
+    """
+    # Get dicts of hypernym:distance from node to hypernym (AKA index of list)
+    node1_ancestor_distances = dict()
+    node1_ancestors = (taxonomy.get_ancestors(node1))
+    for h in node1_ancestors:
+        node1_ancestor_distances[h] = node1_ancestors.index(h)
+
+    node2_ancestor_distances = dict()
+    node2_ancestors = (taxonomy.get_ancestors(node2))
+    for h in node2_ancestors:
+        node2_ancestor_distances[h] = node2_ancestors.index(h)
+
+    # Find the common hypernyms between the two nodes
+    common = set(node1_ancestors) & set(node2_ancestors)
+
+    # get sums of distances of common hypernyms, then get the word with minimum sum
+    candidates = dict()
+    for c in common:
+        candidates[c] = node1_ancestor_distances[c] + node2_ancestor_distances[c]
+    
+    lowest_common_ancestor = min(candidates, key=candidates.get)
+    # lowest_common_ancestor = lowest_ca(taxonomy, [node1, node2], 'entity')[1]
+    # print("node 1 ancestors: ", node1_ancestors)
+    # print("node 2 ancestors: ", node2_ancestors)
+
+    node1_lca_distance = node1_ancestor_distances[lowest_common_ancestor]
+    node2_lca_distance = node2_ancestor_distances[lowest_common_ancestor]
+    node3_distance = len(taxonomy.get_ancestors(lowest_common_ancestor)) - 1
+    numerator = 2 * node3_distance
+    denominator = node1_lca_distance + node2_lca_distance + (2 * node3_distance)
+
+    if denominator == 0:
+        return 0
+    return numerator / denominator
+
+def rosenberg_descendent_similarity(taxonomy, node):
     total = 0
     num_tests = 10
-    descendents = self.get_descendents(node)
+    descendents = taxonomy.get_descendants(node)
     for d in descendents:
         d_sim_total = 0
         for _ in range(num_tests):
-            x = self.random_descendents(node, 1)[0]
-            d_sim_total += self.wu_palmer_similarity(d, x)
+            x = taxonomy.random_descendants(node, 1)[0]
+            d_sim_total += wu_palmer_similarity_2(taxonomy, d, x)
         d_sim_avg = d_sim_total / num_tests
         total += d_sim_avg
     if len(descendents) == 0:
         return 0
     avg = total / len(descendents)
     return avg
+
+if __name__ == "__main__":
+    wnt = WordnetTaxonomy("entity.n.01")
+    print(wu_palmer_similarity_2(wnt, "hill.n.01","coast.n.01"))
+    print(rosenberg_descendent_similarity(wnt, "dog.n.01"))
