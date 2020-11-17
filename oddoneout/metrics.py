@@ -28,7 +28,7 @@ class Taxonomy:
 from taxonomy import GraphTaxonomy
 from taxonomy import lowest_common_ancestor as lowest_ca
 from ozone.taxonomy import WordnetTaxonomy
-
+from time import sleep
 def flatness(taxonomy, node):
     """
     The ratio of children to total descendents of a category.
@@ -72,8 +72,41 @@ def repetitions(taxonomy, node):
     # repetitions 2
     # return sum([1 for instance in taxonomy.get_descendant_instances(node) if len(taxonomy.get_parents(instance)) > 1])
 
+def wup_distance(taxonomy, parent, child):
+    curr = parent
+    res = 0
+    while curr != None:
+        curr_children = taxonomy.get_children(curr)
+        if curr_children == []:
+            curr = None
+        else:
+            if child not in curr_children:
+                for c in curr_children:
+                    if child in taxonomy.get_descendants(c):
+                        curr = c
+                        res += 1
+                        break
+            else:
+                return res + 1
 
-def wu_palmer_similarity(taxonomy, node1, node2):
+def wup_distance(taxonomy, parent, child):
+    curr = parent
+    res = 0
+    while curr != None:
+        curr_children = taxonomy.get_children(curr)
+        if curr_children == []:
+            curr = None
+        else:
+            if child not in curr_children:
+                for c in curr_children:
+                    if child in taxonomy.get_descendants(c):
+                        curr = c
+                        res += 1
+                        break
+            else:
+                return res + 1
+
+def wu_palmer_similarity(taxonomy, node1, node2, target):
     """
     Similarity metric from Wu and Palmer (1994).
 
@@ -83,39 +116,20 @@ def wu_palmer_similarity(taxonomy, node1, node2):
     the two nodes. This ratio is then multiplied by two.
 
     """
-    # Get dicts of hypernym:distance from node to hypernym (AKA index of list)
-    node1_ancestor_distances = dict()
-    node1_ancestors = sorted(taxonomy.get_ancestor_categories(node1))
-    for h in node1_ancestors:
-        node1_ancestor_distances[h] = node1_ancestors.index(h)
-
-    node2_ancestor_distances = dict()
-    node2_ancestors = sorted(taxonomy.get_ancestor_categories(node2))
-    for h in node2_ancestors:
-        node2_ancestor_distances[h] = node2_ancestors.index(h)
-
-    # Find the common hypernyms between the two nodes
-    common = set(node1_ancestors) & set(node2_ancestors)
-
-    # get sums of distances of common hypernyms, then get the word with minimum sum
-    candidates = dict()
-    for c in common:
-        candidates[c] = node1_ancestor_distances[c] + node2_ancestor_distances[c]
-
-    # lowest_common_ancestor = min(candidates, key=candidates.get)
-    lowest_common_ancestor = lowest_ca(taxonomy, [node1, node2], 'entity')[1]
-    # print("node 1 ancestors: ", node1_ancestors)
-    # print("node 2 ancestors: ", node2_ancestors)
-
-    node1_lca_distance = node1_ancestor_distances[lowest_common_ancestor]
-    node2_lca_distance = node2_ancestor_distances[lowest_common_ancestor]
-    node3_distance = len(taxonomy.get_ancestor_categories(lowest_common_ancestor)) - 1
-    numerator = 2 * node3_distance
-    denominator = node1_lca_distance + node2_lca_distance + (2 * node3_distance)
-    # print(node1_lca_distance, node2_lca_distance, node3_distance)
-
-    if denominator == 0:
+    target_ancestors = taxonomy.get_ancestor_categories(target)
+    common_ancestors = taxonomy.get_ancestor_categories(node1) & taxonomy.get_ancestor_categories(node2)
+    common_ancestors = common_ancestors - target_ancestors
+    if len(common_ancestors) == 0:
         return 0
+    scored_ancestors = [(taxonomy.get_specificity(hyp), hyp)
+                        for hyp in common_ancestors]
+    sorted_ancestors = sorted(scored_ancestors)
+    least_common_ancestor = sorted_ancestors[0][1]
+    node1_score = wup_distance(taxonomy, least_common_ancestor, node1)
+    node2_score = wup_distance(taxonomy, least_common_ancestor, node2)
+    node3_score = wup_distance(taxonomy, target, least_common_ancestor)
+    numerator = 2 * node3_score
+    denominator = node1_score + node2_score + (2 * node3_score)
     return numerator / denominator
 
 def wu_palmer_similarity_2(taxonomy, node1, node2):
@@ -179,6 +193,24 @@ def rosenberg_descendent_similarity(taxonomy, node):
     return avg
 
 if __name__ == "__main__":
-    wnt = WordnetTaxonomy("entity.n.01")
-    print(wu_palmer_similarity_2(wnt, "hill.n.01","coast.n.01"))
-    print(rosenberg_descendent_similarity(wnt, "dog.n.01"))
+    # wnt = WordnetTaxonomy("entity.n.01")
+    ft = GraphTaxonomy(
+            'entity',
+            {'apple': ['fruit'],
+             'lemon': ['citrus'],
+             'orange': ['citrus', 'color'],
+             'peach': ['fruit', 'color'],
+             'red': ['color'],
+             'yellow': ['color'],
+             'citrus': ['fruit'],
+             'fruit': ['entity'],
+             'color': ['entity'],
+             'entity': []}
+        )
+    print(wu_palmer_similarity(ft, "yellow", "orange", "entity"))
+    print(wu_palmer_similarity(ft, "lemon", "orange", "entity"))
+    print(wu_palmer_similarity(ft, "yellow", "apple", "entity"))
+    print(wu_palmer_similarity(ft, "fruit", "entity", "entity"))
+    # print(wu_palmer_similarity(wnt, "hill", "coast", "entity.n.01"))
+    #print(wu_palmer_similarity(wnt, "dog", "cat", "entity"))
+    #print(rosenberg_descendent_similarity(wnt, "dog.n.01"))
