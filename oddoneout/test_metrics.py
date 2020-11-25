@@ -37,8 +37,8 @@ class TestMetrics(unittest.TestCase):
     def test_wu_palmer(self):
         # TODO: check to make sure these numbers are correct for the
         # example fruit taxonomy.
-        print(wu_palmer_similarity(self.taxonomy, "orange", "lemon"))
-        print(wu_palmer_similarity(self.taxonomy, "orange", "red"))
+        print(wu_palmer_similarity(self.taxonomy, "orange", "lemon", "entity"))
+        print(wu_palmer_similarity(self.taxonomy, "orange", "red", "entity"))
 
     def test_rosenberg_descendant_sim(self):
         rds_geological_formation = rosenberg_descendent_similarity(self.wnt, "geological_formation.n.01")

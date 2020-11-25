@@ -27,7 +27,8 @@ class Taxonomy:
 """
 from taxonomy import GraphTaxonomy
 from taxonomy import lowest_common_ancestor as lowest_ca
-from ozone.taxonomy import WordnetTaxonomy
+#from ozone.taxonomy import WordnetTaxonomy
+from wordnet import WordnetTaxonomy
 from time import sleep
 def flatness(taxonomy, node):
     """
@@ -76,35 +77,24 @@ def wup_distance(taxonomy, parent, child):
     curr = parent
     res = 0
     while curr != None:
+        
         curr_children = taxonomy.get_children(curr)
-        if curr_children == []:
-            curr = None
-        else:
-            if child not in curr_children:
-                for c in curr_children:
-                    if child in taxonomy.get_descendants(c):
-                        curr = c
-                        res += 1
-                        break
-            else:
-                return res + 1
+        curr_children_as_lemmas = [taxonomy.as_lemma(l) for l in curr_children]
 
-def wup_distance(taxonomy, parent, child):
-    curr = parent
-    res = 0
-    while curr != None:
-        curr_children = taxonomy.get_children(curr)
         if curr_children == []:
-            curr = None
+            return 0
+            
         else:
-            if child not in curr_children:
+            if child in curr_children_as_lemmas:
+                return res + 1
+            else:
                 for c in curr_children:
                     if child in taxonomy.get_descendants(c):
                         curr = c
                         res += 1
                         break
-            else:
                 return res + 1
+                
 
 def wu_palmer_similarity(taxonomy, node1, node2, target):
     """
@@ -127,7 +117,7 @@ def wu_palmer_similarity(taxonomy, node1, node2, target):
     least_common_ancestor = sorted_ancestors[0][1]
     node1_score = wup_distance(taxonomy, least_common_ancestor, node1)
     node2_score = wup_distance(taxonomy, least_common_ancestor, node2)
-    node3_score = wup_distance(taxonomy, target, least_common_ancestor)
+    node3_score = wup_distance(taxonomy, target, taxonomy.as_lemma(least_common_ancestor))
     numerator = 2 * node3_score
     denominator = node1_score + node2_score + (2 * node3_score)
     return numerator / denominator
@@ -191,26 +181,3 @@ def rosenberg_descendent_similarity(taxonomy, node):
         return 0
     avg = total / len(descendents)
     return avg
-
-if __name__ == "__main__":
-    # wnt = WordnetTaxonomy("entity.n.01")
-    ft = GraphTaxonomy(
-            'entity',
-            {'apple': ['fruit'],
-             'lemon': ['citrus'],
-             'orange': ['citrus', 'color'],
-             'peach': ['fruit', 'color'],
-             'red': ['color'],
-             'yellow': ['color'],
-             'citrus': ['fruit'],
-             'fruit': ['entity'],
-             'color': ['entity'],
-             'entity': []}
-        )
-    print(wu_palmer_similarity(ft, "yellow", "orange", "entity"))
-    print(wu_palmer_similarity(ft, "lemon", "orange", "entity"))
-    print(wu_palmer_similarity(ft, "yellow", "apple", "entity"))
-    print(wu_palmer_similarity(ft, "fruit", "entity", "entity"))
-    # print(wu_palmer_similarity(wnt, "hill", "coast", "entity.n.01"))
-    #print(wu_palmer_similarity(wnt, "dog", "cat", "entity"))
-    #print(rosenberg_descendent_similarity(wnt, "dog.n.01"))
