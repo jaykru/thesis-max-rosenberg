@@ -56,9 +56,9 @@ class WordnetPuzzleGenerator(PuzzleGenerator):
         return (xyz, onehot.index(1))
 
 def one_hot(word, vocab):
-    vec = [0]*len(vocab)
-    vec[vocab[word]] = 1
-    return vec
+    john = [0]*len(vocab)
+    john[vocab[word]] = 1
+    return john
 
 def make_puzzle_vector(puzzle, vocab):
     choices, _ = puzzle
